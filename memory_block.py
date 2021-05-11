@@ -5,20 +5,24 @@ import torchvision.models as models
 
 import numpy as np
 
-feature_size = 512 * 7 * 7
-bj_transform_size = 2048
-embedding_size = 2048
+from log import *
+from utils import clone_layer
+
+debug = True
 
 
 class MemoryUnit(nn.Module):
-    def __init__(self):
+    def __init__(self, feature_size, embedding_size, debug=True):
         super(MemoryUnit, self).__init__()
+        self.debug = debug
+
         self.embed = nn.Sequential(
             nn.Linear(in_features=feature_size, out_features=embedding_size), nn.Tanh()
         )
 
     def forward(self, x):
         x = self.embed(x)
+        printDebug(f"MemUnit: {x.shape}", debug=self.debug)
         _x = x.T
 
         m = torch.mm(x, _x)
@@ -48,46 +52,40 @@ class AutoEncoder(nn.Module):
 
 
 class MemoryBlock(nn.Module):
-    def __init__(self):
+    def __init__(
+        self,
+        feature_size=25088,
+        embedding_size=2048,
+        bj_transform_size=2048,
+        dim_M=3,
+        debug=True,
+    ):
         super(MemoryBlock, self).__init__()
+
+        self.debug = debug
+
         self.autoEncoder = AutoEncoder(
             input_shape=feature_size, output_shape=bj_transform_size
         )
-        self.memoryUnit1 = MemoryUnit()
-        self.memoryUnit2 = MemoryUnit()
-        self.memoryUnit3 = MemoryUnit()
-        self.memoryUnit4 = MemoryUnit()
-        self.memoryUnit5 = MemoryUnit()
-        self.memoryUnit6 = MemoryUnit()
-        self.memoryUnit7 = MemoryUnit()
-        self.memoryUnit8 = MemoryUnit()
-        self.memoryUnit9 = MemoryUnit()
-        self.memoryUnit10 = MemoryUnit()
+        self.dim_M = dim_M
+        self.units = clone_layer(
+            MemoryUnit(
+                feature_size=feature_size, embedding_size=embedding_size, debug=debug
+            ),
+            dim_M,
+        )
 
     def forward(self, x):
+        printDebug(f"MemBlck: {x.shape}", debug=self.debug)
         C = self.autoEncoder(x)
-        p1 = self.memoryUnit1(x).unsqueeze(0)
-        p2 = self.memoryUnit2(x).unsqueeze(0)
-        p3 = self.memoryUnit3(x).unsqueeze(0)
-        p4 = self.memoryUnit4(x).unsqueeze(0)
-        p5 = self.memoryUnit5(x).unsqueeze(0)
-        p6 = self.memoryUnit6(x).unsqueeze(0)
-        p7 = self.memoryUnit7(x).unsqueeze(0)
-        p8 = self.memoryUnit8(x).unsqueeze(0)
-        p9 = self.memoryUnit9(x).unsqueeze(0)
-        p10 = self.memoryUnit10(x).unsqueeze(0)
+        probs = []
+
+        for unit in self.units:
+            probs.append(unit(x).unsqueeze(0))
 
         X_hat = []
-        X_hat.append(torch.mm(p1, C))
-        X_hat.append(torch.mm(p2, C))
-        X_hat.append(torch.mm(p3, C))
-        X_hat.append(torch.mm(p4, C))
-        X_hat.append(torch.mm(p5, C))
-        X_hat.append(torch.mm(p6, C))
-        X_hat.append(torch.mm(p7, C))
-        X_hat.append(torch.mm(p8, C))
-        X_hat.append(torch.mm(p9, C))
-        X_hat.append(torch.mm(p10, C))
+        for i in range(self.dim_M):
+            X_hat.append(torch.matmul(probs[i], C))
 
         X_hat = torch.stack(X_hat, dim=0).squeeze(1)
         return X_hat

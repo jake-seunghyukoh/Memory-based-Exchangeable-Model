@@ -1,0 +1,1 @@
+python main.py --multiprocessing-distributed --rank 0 --world-size 1 -b 2 --num_patches 10 /home/ubuntu/TCGA/images/
